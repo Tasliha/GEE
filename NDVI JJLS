@@ -1,0 +1,69 @@
+// Load roi dari asset
+var roi = ee.FeatureCollection('users/taslihahilmina12/Kec_JJLS');
+Map.centerObject(roi, 12);
+
+// Function mask Landsat 7
+function maskL457sr(image) {
+  var qaMask = image.select('QA_PIXEL').bitwiseAnd(parseInt('11111', 2)).eq(0);
+  var saturationMask = image.select('QA_RADSAT').eq(0);
+  var opticalBands = image.select('SR_B.').multiply(0.0000275).add(-0.2);
+  var thermalBand = image.select('ST_B6').multiply(0.00341802).add(149.0).add(-273.15);
+  return image.addBands(opticalBands, null, true)
+        .addBands(thermalBand, null, true)
+        .updateMask(qaMask)
+        .updateMask(saturationMask);
+}
+
+// Filter Landsat 7
+var landsat = ee.ImageCollection('LANDSAT/LE07/C02/T1_L2')
+    .filterBounds(roi)
+    .filterDate('2003-02-01', '2003-12-01')
+    .map(maskL457sr);
+
+var landsat = landsat.median();
+
+// NDVI
+var ndvi = landsat.select('SR_B4').subtract(landsat.select('SR_B3'))
+            .divide(landsat.select('SR_B4').add(landsat.select('SR_B3')))
+            .clip(roi);
+
+var ndviVis = {
+  min: -0.5,
+  max: 0.6,
+  palette: [
+    '040274','040281','0502a3','0502b8','0502ce','0502e6',
+    '0602ff','235cb1','307ef3','269db1','30c8e2','32d3ef',
+    '3be285','3ff38f','86e26f','3ae237','b5e22e','d6e21f',
+    'fff705','ffd611','ffb613','ff8b13','ff6e08','ff500d',
+    'ff0000','de0101','c21301','a71001','911003'
+  ]
+};
+Map.addLayer(ndvi, ndviVis, 'NDVI');
+
+Export.image.toDrive({
+  image: ndvi,
+  description: 'NDVI',
+  scale: 30,
+  region: roi,
+  fileFormat: 'GeoTIFF',
+});
+
+// NDBI
+var ndbi = landsat.select('SR_B5').subtract(landsat.select('SR_B4'))
+            .divide(landsat.select('SR_B5').add(landsat.select('SR_B4')))
+            .clip(roi);
+
+var ndbiVis = {
+  min: -0.33,
+  max: 0.39,
+  palette: ndviVis.palette
+};
+Map.addLayer(ndbi, ndbiVis, 'NDBI');
+
+Export.image.toDrive({
+  image: ndbi,
+  description: 'NDBI',
+  scale: 30,
+  region: roi,
+  fileFormat: 'GeoTIFF',
+});
